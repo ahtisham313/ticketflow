@@ -1,0 +1,7 @@
+TicketFlow uses Alembic's asynchronous migration environment.
+
+Create schema changes as versioned migrations and apply them with:
+
+    alembic upgrade head
+
+Application startup must never call Base.metadata.create_all().

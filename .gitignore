@@ -30,3 +30,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Alembic / packaging artifacts
+*.egg-info/
+build/
+dist/
