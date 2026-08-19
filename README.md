@@ -1,8 +1,8 @@
 # TicketFlow
 
 TicketFlow is a production-style FastAPI modular monolith for a support-ticket
-technical assessment. It currently contains the Phase 1 foundation and Phase 2 JWT
-authentication and role-authorization layer.
+technical assessment. It currently contains the Phase 1 foundation, Phase 2 JWT
+authentication, and Phase 3 ticket workflow and comment APIs.
 
 ## Phase 1 stack
 
@@ -108,6 +108,24 @@ account already exists.
 - The FastAPI lifespan owns long-lived Redis and database-pool cleanup.
 - Authentication settings and required libraries are present for the planned Phase 2,
   but no authentication behavior is implemented here.
+
+## Phase 3 ticket and comment API
+
+```text
+POST   /api/v1/tickets
+GET    /api/v1/tickets
+GET    /api/v1/tickets/{ticket_id}
+PATCH  /api/v1/tickets/{ticket_id}
+DELETE /api/v1/tickets/{ticket_id}
+PATCH  /api/v1/tickets/{ticket_id}/status
+GET    /api/v1/tickets/{ticket_id}/comments
+POST   /api/v1/tickets/{ticket_id}/comments
+```
+
+Customers create, list, view, edit, and delete only their own tickets. Content edits
+and deletion are limited to `OPEN`; agents use comments and the dedicated sequential
+status workflow. Ticket lists support role-scoped filters, PostgreSQL `ILIKE` search,
+and database-level pagination.
 
 ## Stop the stack
 

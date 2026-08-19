@@ -63,3 +63,17 @@ async def require_agent(
         )
 
     return current_user
+
+
+async def require_customer(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow only a currently authenticated database CUSTOMER."""
+
+    if current_user.role != UserRole.CUSTOMER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer access required",
+        )
+
+    return current_user
