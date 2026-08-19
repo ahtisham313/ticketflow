@@ -1,0 +1,65 @@
+"""Reusable authentication and role-authorization dependencies."""
+
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import TokenType, TokenValidationError, decode_token
+from app.db.session import get_db_session
+from app.models.user import User, UserRole
+from app.services.auth_service import get_user_by_id
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _authentication_exception() -> HTTPException:
+    """Create the consistent 401 response used by protected endpoints."""
+
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def get_current_user(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(bearer_scheme),
+    ],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> User:
+    """Validate an access token and return the trusted current database user."""
+
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise _authentication_exception()
+
+    try:
+        user_id = decode_token(
+            credentials.credentials,
+            expected_type=TokenType.ACCESS,
+        )
+    except TokenValidationError:
+        raise _authentication_exception() from None
+
+    user = await get_user_by_id(session, user_id)
+    if user is None:
+        raise _authentication_exception()
+
+    return user
+
+
+async def require_agent(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Allow only a currently authenticated database AGENT."""
+
+    if current_user.role != UserRole.AGENT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Agent access required",
+        )
+
+    return current_user

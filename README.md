@@ -1,9 +1,8 @@
 # TicketFlow
 
 TicketFlow is a production-style FastAPI modular monolith for a support-ticket
-technical assessment. This branch currently contains **Phase 1 only**: application
-configuration, PostgreSQL schema, Redis connectivity, health checks, Docker startup,
-and an idempotent support-agent seed.
+technical assessment. It currently contains the Phase 1 foundation and Phase 2 JWT
+authentication and role-authorization layer.
 
 ## Phase 1 stack
 
@@ -49,6 +48,19 @@ prevents the API server from starting.
 
 - Health: <http://localhost:8000/health>
 - OpenAPI documentation: <http://localhost:8000/docs>
+
+Phase 2 authentication endpoints:
+
+```text
+POST /api/v1/auth/register
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+GET  /api/v1/auth/me
+```
+
+Public registration always creates a `CUSTOMER`. The seeded `AGENT` uses the same
+login endpoint. Access tokens authenticate API requests; refresh tokens can only be
+exchanged for a new access token and cannot access protected endpoints.
 
 A healthy response is:
 

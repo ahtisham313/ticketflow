@@ -3,23 +3,23 @@
 import asyncio
 import logging
 
-from pwdlib import PasswordHash
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
+from app.core.security import hash_password
 from app.db.session import async_session_factory, engine
 from app.models.user import User, UserRole
+from app.services.auth_service import normalize_email
 
 logger = logging.getLogger(__name__)
-password_hash = PasswordHash.recommended()
 
 
 async def seed_agent() -> None:
     """Create the configured agent unless an account with its email already exists."""
 
     settings = get_settings()
-    email = str(settings.seeded_agent_email).strip().lower()
+    email = normalize_email(str(settings.seeded_agent_email))
 
     async with async_session_factory() as session:
         existing_user_id = await session.scalar(select(User.id).where(User.email == email))
@@ -29,9 +29,7 @@ async def seed_agent() -> None:
 
         agent = User(
             email=email,
-            password_hash=password_hash.hash(
-                settings.seeded_agent_password.get_secret_value()
-            ),
+            password_hash=hash_password(settings.seeded_agent_password.get_secret_value()),
             role=UserRole.AGENT,
         )
         session.add(agent)
