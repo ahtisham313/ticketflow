@@ -2,7 +2,8 @@
 
 TicketFlow is a production-style FastAPI modular monolith for a support-ticket
 technical assessment. It currently contains the Phase 1 foundation, Phase 2 JWT
-authentication, and Phase 3 ticket workflow and comment APIs.
+authentication, Phase 3 ticket workflow/comments, and Phase 4 Redis caching with
+agent dashboard statistics.
 
 ## Phase 1 stack
 
@@ -126,6 +127,20 @@ Customers create, list, view, edit, and delete only their own tickets. Content e
 and deletion are limited to `OPEN`; agents use comments and the dedicated sequential
 status workflow. Ticket lists support role-scoped filters, PostgreSQL `ILIKE` search,
 and database-level pagination.
+
+## Phase 4 Redis caching and dashboard
+
+Filtered ticket lists are cached for 30 seconds with deterministic keys shaped like:
+
+```text
+tickets:list:v<version>:agent:<sha256>
+tickets:list:v<version>:customer:<user_uuid>:<sha256>
+```
+
+Every successful ticket write increments `tickets:list:version` and deletes the fixed
+`dashboard:stats` cache entry. Old list versions expire naturally; application code
+never scans or wildcard-deletes list keys. `GET /api/v1/dashboard/stats` is agent-only
+and caches current PostgreSQL aggregate counts for 60 seconds.
 
 ## Stop the stack
 

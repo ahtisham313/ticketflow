@@ -22,6 +22,8 @@ class Settings(BaseSettings):
 
     database_url: str
     redis_url: str
+    ticket_list_cache_ttl_seconds: int = Field(default=30, ge=1, le=3600)
+    dashboard_cache_ttl_seconds: int = Field(default=60, ge=1, le=3600)
 
     jwt_secret: SecretStr = Field(min_length=32)
     access_token_expire_minutes: int = Field(default=15, ge=1)

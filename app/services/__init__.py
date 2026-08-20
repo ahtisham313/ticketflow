@@ -8,6 +8,8 @@ from app.services.auth_service import (
     register_customer,
 )
 from app.services.comment_service import create_comment, list_comments
+from app.services.cache_service import invalidate_ticket_caches
+from app.services.dashboard_service import calculate_dashboard_stats
 from app.services.ticket_service import (
     TicketNotFoundError,
     TicketStateError,
@@ -27,6 +29,8 @@ __all__ = [
     "register_customer",
     "create_comment",
     "list_comments",
+    "invalidate_ticket_caches",
+    "calculate_dashboard_stats",
     "TicketNotFoundError",
     "TicketStateError",
     "change_ticket_status",

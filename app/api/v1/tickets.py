@@ -4,9 +4,15 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_agent, require_customer
+from app.core.deps import (
+    get_current_user,
+    get_redis,
+    require_agent,
+    require_customer,
+)
 from app.db.session import get_db_session
 from app.models.ticket import TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User
@@ -27,6 +33,13 @@ from app.services.ticket_service import (
     list_tickets,
     update_open_ticket,
 )
+from app.services.cache_service import (
+    TicketListCacheParameters,
+    get_cached_ticket_list,
+    invalidate_ticket_caches,
+    resolve_ticket_list_cache_key,
+    set_cached_ticket_list,
+)
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
@@ -40,6 +53,7 @@ async def create(
     payload: TicketCreateRequest,
     customer: Annotated[User, Depends(require_customer)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> TicketResponse:
     """Create an OPEN ticket for the authenticated customer."""
 
@@ -51,6 +65,7 @@ async def create(
         category=payload.category,
         priority=payload.priority,
     )
+    await invalidate_ticket_caches(redis)
     return TicketResponse.model_validate(ticket)
 
 
@@ -58,6 +73,7 @@ async def create(
 async def get_list(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
     status_filter: Annotated[TicketStatus | None, Query(alias="status")] = None,
     priority: TicketPriority | None = None,
     category: TicketCategory | None = None,
@@ -66,6 +82,23 @@ async def get_list(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> TicketListResponse:
     """List tickets with SQL ownership scoping, filters, search, and pagination."""
+
+    cache_parameters = TicketListCacheParameters(
+        status=status_filter,
+        priority=priority,
+        category=category,
+        query=q,
+        page=page,
+        page_size=page_size,
+    )
+    cache_key = await resolve_ticket_list_cache_key(
+        redis,
+        current_user,
+        cache_parameters,
+    )
+    cached_response = await get_cached_ticket_list(redis, cache_key)
+    if cached_response is not None:
+        return cached_response
 
     result = await list_tickets(
         session,
@@ -77,13 +110,15 @@ async def get_list(
         page=page,
         page_size=page_size,
     )
-    return TicketListResponse(
+    response = TicketListResponse(
         items=[TicketResponse.model_validate(item) for item in result.items],
         page=result.page,
         page_size=result.page_size,
         total=result.total,
         pages=result.pages,
     )
+    await set_cached_ticket_list(redis, cache_key, response)
+    return response
 
 
 @router.get("/{ticket_id}", response_model=TicketResponse)
@@ -108,6 +143,7 @@ async def update(
     payload: TicketUpdateRequest,
     customer: Annotated[User, Depends(require_customer)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> TicketResponse:
     """Partially update a customer-owned OPEN ticket."""
 
@@ -123,6 +159,7 @@ async def update(
     except TicketStateError as exc:
         raise _ticket_state_error(exc) from None
 
+    await invalidate_ticket_caches(redis)
     return TicketResponse.model_validate(ticket)
 
 
@@ -135,6 +172,7 @@ async def delete(
     ticket_id: uuid.UUID,
     customer: Annotated[User, Depends(require_customer)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> Response:
     """Hard-delete a customer-owned OPEN ticket and its comments."""
 
@@ -145,6 +183,7 @@ async def delete(
     except TicketStateError as exc:
         raise _ticket_state_error(exc) from None
 
+    await invalidate_ticket_caches(redis)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -154,6 +193,7 @@ async def update_status(
     payload: TicketStatusUpdateRequest,
     _agent: Annotated[User, Depends(require_agent)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> TicketResponse:
     """Move a ticket through exactly one valid workflow transition."""
 
@@ -164,6 +204,7 @@ async def update_status(
     except TicketStateError as exc:
         raise _ticket_state_error(exc) from None
 
+    await invalidate_ticket_caches(redis)
     return TicketResponse.model_validate(ticket)
 
 

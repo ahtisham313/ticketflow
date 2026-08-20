@@ -1,9 +1,10 @@
 """Reusable authentication and role-authorization dependencies."""
 
-from typing import Annotated
+from typing import Annotated, cast
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import TokenType, TokenValidationError, decode_token
@@ -12,6 +13,12 @@ from app.models.user import User, UserRole
 from app.services.auth_service import get_user_by_id
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_redis(request: Request) -> Redis:
+    """Return the process-wide Redis client owned by the FastAPI lifespan."""
+
+    return cast(Redis, request.app.state.redis)
 
 
 def _authentication_exception() -> HTTPException:

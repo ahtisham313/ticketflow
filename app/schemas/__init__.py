@@ -9,6 +9,12 @@ from app.schemas.auth import (
     UserRegisterRequest,
 )
 from app.schemas.comment import CommentCreateRequest, CommentResponse
+from app.schemas.dashboard import (
+    DashboardStatsResponse,
+    TicketCategoryCounts,
+    TicketPriorityCounts,
+    TicketStatusCounts,
+)
 from app.schemas.ticket import (
     TicketCreateRequest,
     TicketListResponse,
@@ -26,6 +32,10 @@ __all__ = [
     "UserRegisterRequest",
     "CommentCreateRequest",
     "CommentResponse",
+    "DashboardStatsResponse",
+    "TicketCategoryCounts",
+    "TicketPriorityCounts",
+    "TicketStatusCounts",
     "TicketCreateRequest",
     "TicketListResponse",
     "TicketResponse",
