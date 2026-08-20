@@ -3,7 +3,7 @@
 TicketFlow is a production-style FastAPI modular monolith for a support-ticket
 technical assessment. It currently contains the Phase 1 foundation, Phase 2 JWT
 authentication, Phase 3 ticket workflow/comments, and Phase 4 Redis caching with
-agent dashboard statistics.
+agent dashboard statistics. Phase 5 adds authenticated real-time notifications.
 
 ## Phase 1 stack
 
@@ -141,6 +141,32 @@ Every successful ticket write increments `tickets:list:version` and deletes the 
 `dashboard:stats` cache entry. Old list versions expire naturally; application code
 never scans or wildcard-deletes list keys. `GET /api/v1/dashboard/stats` is agent-only
 and caches current PostgreSQL aggregate counts for 60 seconds.
+
+## Phase 5 real-time WebSockets
+
+TicketFlow exposes two notification-only WebSocket endpoints:
+
+```text
+/ws/tickets/{ticket_id}?token=<access_token>
+/ws/dashboard?token=<access_token>
+```
+
+Ticket subscriptions use the same database-backed ownership rules as the REST API:
+customers may subscribe only to their own tickets, while agents may subscribe to any
+ticket. The dashboard subscription is agent-only. Refresh, expired, malformed, and
+missing tokens are rejected because WebSockets require a valid access token.
+
+Creating a comment over REST emits `comment.created` to that ticket's channel after
+the comment commits. A successful REST status transition emits
+`ticket.status_changed` to both the ticket channel and connected dashboard agents,
+after PostgreSQL commits and Phase 4 cache invalidation finishes. WebSocket delivery
+is supplementary and does not replace REST or PostgreSQL as the source of truth.
+
+WebSocket connections are maintained in-process because the assessment runs a single
+application instance. With multiple API instances, an event distribution mechanism
+such as Redis Pub/Sub would be required so connections attached to different
+instances receive the same events. That distributed extension is intentionally not
+implemented in Phase 5.
 
 ## Stop the stack
 

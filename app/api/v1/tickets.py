@@ -40,6 +40,11 @@ from app.services.cache_service import (
     resolve_ticket_list_cache_key,
     set_cached_ticket_list,
 )
+from app.services.ws_manager import (
+    DASHBOARD_CHANNEL,
+    connection_manager,
+    ticket_channel,
+)
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
@@ -191,20 +196,33 @@ async def delete(
 async def update_status(
     ticket_id: uuid.UUID,
     payload: TicketStatusUpdateRequest,
-    _agent: Annotated[User, Depends(require_agent)],
+    agent: Annotated[User, Depends(require_agent)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> TicketResponse:
     """Move a ticket through exactly one valid workflow transition."""
 
     try:
-        ticket = await change_ticket_status(session, ticket_id, payload.status)
+        status_change = await change_ticket_status(session, ticket_id, payload.status)
     except TicketNotFoundError:
         raise _ticket_not_found() from None
     except TicketStateError as exc:
         raise _ticket_state_error(exc) from None
 
     await invalidate_ticket_caches(redis)
+    ticket = status_change.ticket
+    event = {
+        "event": "ticket.status_changed",
+        "ticket_id": str(ticket.id),
+        "data": {
+            "old_status": status_change.old_status.value,
+            "new_status": ticket.status.value,
+            "changed_by": str(agent.id),
+            "updated_at": ticket.updated_at.isoformat(),
+        },
+    }
+    await connection_manager.broadcast(ticket_channel(ticket.id), event)
+    await connection_manager.broadcast(DASHBOARD_CHANNEL, event)
     return TicketResponse.model_validate(ticket)
 
 

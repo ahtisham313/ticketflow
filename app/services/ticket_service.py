@@ -30,6 +30,14 @@ class TicketPage:
     pages: int
 
 
+@dataclass(frozen=True, slots=True)
+class TicketStatusChange:
+    """A committed status mutation and the state it replaced."""
+
+    ticket: Ticket
+    old_status: TicketStatus
+
+
 ALLOWED_STATUS_TRANSITIONS: dict[TicketStatus, TicketStatus | None] = {
     TicketStatus.OPEN: TicketStatus.IN_PROGRESS,
     TicketStatus.IN_PROGRESS: TicketStatus.RESOLVED,
@@ -187,7 +195,7 @@ async def change_ticket_status(
     session: AsyncSession,
     ticket_id: uuid.UUID,
     new_status: TicketStatus,
-) -> Ticket:
+) -> TicketStatusChange:
     """Apply exactly the next allowed workflow state to a locked ticket."""
 
     statement = select(Ticket).where(Ticket.id == ticket_id).with_for_update()
@@ -195,7 +203,8 @@ async def change_ticket_status(
     if ticket is None:
         raise TicketNotFoundError
 
-    expected_status = ALLOWED_STATUS_TRANSITIONS[ticket.status]
+    old_status = ticket.status
+    expected_status = ALLOWED_STATUS_TRANSITIONS[old_status]
     if new_status != expected_status:
         raise TicketStateError(
             f"Invalid status transition from {ticket.status.value} "
@@ -205,7 +214,7 @@ async def change_ticket_status(
     ticket.status = new_status
     await session.commit()
     await session.refresh(ticket)
-    return ticket
+    return TicketStatusChange(ticket=ticket, old_status=old_status)
 
 
 def _require_open(ticket: Ticket, *, operation: str) -> None:

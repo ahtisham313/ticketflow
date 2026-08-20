@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.comment import CommentCreateRequest, CommentResponse
 from app.services.comment_service import create_comment, list_comments
 from app.services.ticket_service import TicketNotFoundError
+from app.services.ws_manager import connection_manager, ticket_channel
 
 router = APIRouter(
     prefix="/api/v1/tickets/{ticket_id}/comments",
@@ -58,7 +59,16 @@ async def create(
     except TicketNotFoundError:
         raise _ticket_not_found() from None
 
-    return CommentResponse.model_validate(comment)
+    response = CommentResponse.model_validate(comment)
+    await connection_manager.broadcast(
+        ticket_channel(ticket_id),
+        {
+            "event": "comment.created",
+            "ticket_id": str(ticket_id),
+            "data": response.model_dump(mode="json"),
+        },
+    )
+    return response
 
 
 def _ticket_not_found() -> HTTPException:
