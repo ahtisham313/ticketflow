@@ -3,7 +3,15 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    status,
+)
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +24,7 @@ from app.core.deps import (
 from app.db.session import get_db_session
 from app.models.ticket import TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User
+from app.models.webhook import WebhookEventType
 from app.schemas.ticket import (
     TicketCreateRequest,
     TicketListResponse,
@@ -45,6 +54,7 @@ from app.services.ws_manager import (
     connection_manager,
     ticket_channel,
 )
+from app.services.webhook_service import schedule_webhook_event
 
 router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
@@ -56,6 +66,7 @@ router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 )
 async def create(
     payload: TicketCreateRequest,
+    background_tasks: BackgroundTasks,
     customer: Annotated[User, Depends(require_customer)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -71,6 +82,20 @@ async def create(
         priority=payload.priority,
     )
     await invalidate_ticket_caches(redis)
+    await schedule_webhook_event(
+        background_tasks,
+        session,
+        WebhookEventType.TICKET_CREATED,
+        {
+            "ticket_id": str(ticket.id),
+            "customer_id": str(ticket.customer_id),
+            "title": ticket.title,
+            "category": ticket.category.value,
+            "priority": ticket.priority.value,
+            "status": ticket.status.value,
+            "created_at": ticket.created_at.isoformat(),
+        },
+    )
     return TicketResponse.model_validate(ticket)
 
 
@@ -196,6 +221,7 @@ async def delete(
 async def update_status(
     ticket_id: uuid.UUID,
     payload: TicketStatusUpdateRequest,
+    background_tasks: BackgroundTasks,
     agent: Annotated[User, Depends(require_agent)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
     redis: Annotated[Redis, Depends(get_redis)],
@@ -223,6 +249,18 @@ async def update_status(
     }
     await connection_manager.broadcast(ticket_channel(ticket.id), event)
     await connection_manager.broadcast(DASHBOARD_CHANNEL, event)
+    await schedule_webhook_event(
+        background_tasks,
+        session,
+        WebhookEventType.TICKET_STATUS_CHANGED,
+        {
+            "ticket_id": str(ticket.id),
+            "old_status": status_change.old_status.value,
+            "new_status": ticket.status.value,
+            "changed_by": str(agent.id),
+            "updated_at": ticket.updated_at.isoformat(),
+        },
+    )
     return TicketResponse.model_validate(ticket)
 
 

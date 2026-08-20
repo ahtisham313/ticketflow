@@ -22,6 +22,13 @@ from app.schemas.ticket import (
     TicketStatusUpdateRequest,
     TicketUpdateRequest,
 )
+from app.schemas.webhook import (
+    WebhookCreateRequest,
+    WebhookCreateResponse,
+    WebhookDeliveryResponse,
+    WebhookEventEnvelope,
+    WebhookRegistrationResponse,
+)
 
 __all__ = [
     "AccessTokenResponse",
@@ -41,4 +48,9 @@ __all__ = [
     "TicketResponse",
     "TicketStatusUpdateRequest",
     "TicketUpdateRequest",
+    "WebhookCreateRequest",
+    "WebhookCreateResponse",
+    "WebhookDeliveryResponse",
+    "WebhookEventEnvelope",
+    "WebhookRegistrationResponse",
 ]

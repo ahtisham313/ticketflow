@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     redis_url: str
     ticket_list_cache_ttl_seconds: int = Field(default=30, ge=1, le=3600)
     dashboard_cache_ttl_seconds: int = Field(default=60, ge=1, le=3600)
+    webhook_delivery_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
 
     jwt_secret: SecretStr = Field(min_length=32)
     access_token_expire_minutes: int = Field(default=15, ge=1)

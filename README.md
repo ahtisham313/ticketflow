@@ -4,6 +4,7 @@ TicketFlow is a production-style FastAPI modular monolith for a support-ticket
 technical assessment. It currently contains the Phase 1 foundation, Phase 2 JWT
 authentication, Phase 3 ticket workflow/comments, and Phase 4 Redis caching with
 agent dashboard statistics. Phase 5 adds authenticated real-time notifications.
+Phase 6 adds signed outgoing webhook delivery and PostgreSQL delivery auditing.
 
 ## Phase 1 stack
 
@@ -167,6 +168,49 @@ application instance. With multiple API instances, an event distribution mechani
 such as Redis Pub/Sub would be required so connections attached to different
 instances receive the same events. That distributed extension is intentionally not
 implemented in Phase 5.
+
+## Phase 6 signed outgoing webhooks
+
+Agents manage subscriptions through:
+
+```text
+POST   /api/v1/webhooks
+GET    /api/v1/webhooks
+DELETE /api/v1/webhooks/{webhook_id}
+GET    /api/v1/webhooks/deliveries?limit=100
+```
+
+Supported external event names are exactly `ticket.created` and
+`ticket.status_changed`. PostgreSQL retains the original enum labels
+`TICKET_CREATED` and `TICKET_STATUS_CHANGED`; the Python enum maps those labels to
+the public dot-separated values.
+
+Each registration receives a server-generated 256-bit secret. It is returned only
+by the creation endpoint; normal list and delivery-history responses never expose
+it. Registrations are deactivated instead of hard-deleted so their delivery audit
+rows remain intact.
+
+TicketFlow deterministically serializes each event to UTF-8 JSON bytes, calculates
+HMAC-SHA256 over those exact bytes, and sends the same bytes with:
+
+```text
+Content-Type: application/json
+X-TicketFlow-Signature: sha256=<hex-digest>
+X-TicketFlow-Event: <event-name>
+X-TicketFlow-Delivery-ID: <delivery-uuid>
+```
+
+FastAPI `BackgroundTasks` runs external HTTP delivery after the ticket response is
+sent. Background delivery never uses the request-scoped SQLAlchemy session; each
+attempt opens its own session to write an immutable delivery log. A 2xx response is
+successful. Non-2xx and network errors are recorded as failures and cannot undo the
+already committed ticket operation. There are deliberately no retries or queues in
+this phase.
+
+For production, protect recoverable webhook secrets with managed encryption or a
+secret-management system, apply outbound URL/egress controls to reduce SSRF risk,
+and move delivery to a durable queue with an explicit retry policy. Those extensions
+are outside this assessment phase.
 
 ## Stop the stack
 

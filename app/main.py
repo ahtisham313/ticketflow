@@ -11,6 +11,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.comments import router as comments_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.tickets import router as tickets_router
+from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.ws import router as ws_router
 from app.core.config import get_settings
 from app.db.session import engine
@@ -48,4 +49,5 @@ app.include_router(auth_router)
 app.include_router(tickets_router)
 app.include_router(comments_router)
 app.include_router(dashboard_router)
+app.include_router(webhooks_router)
 app.include_router(ws_router)

@@ -30,8 +30,10 @@ if TYPE_CHECKING:
 class WebhookEventType(str, enum.Enum):
     """Events that can be delivered to registered webhook endpoints."""
 
-    TICKET_CREATED = "TICKET_CREATED"
-    TICKET_STATUS_CHANGED = "TICKET_STATUS_CHANGED"
+    # Member names match the existing PostgreSQL enum labels. Values are the
+    # stable public event names used by REST, WebSockets, and outgoing payloads.
+    TICKET_CREATED = "ticket.created"
+    TICKET_STATUS_CHANGED = "ticket.status_changed"
 
 
 WEBHOOK_EVENT_DB_ENUM = SAEnum(
