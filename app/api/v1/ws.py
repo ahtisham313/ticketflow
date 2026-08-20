@@ -39,6 +39,7 @@ async def ticket_updates(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # A long-lived socket must not retain a database connection while waiting.
     await session.close()
     await _serve_channel(websocket, ticket_channel(ticket_id))
 
@@ -59,6 +60,7 @@ async def dashboard_updates(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # Authentication is complete; release the request-scoped connection early.
     await session.close()
     await _serve_channel(websocket, DASHBOARD_CHANNEL)
 

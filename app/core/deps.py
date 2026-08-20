@@ -51,6 +51,7 @@ async def get_current_user(
     except TokenValidationError:
         raise _authentication_exception() from None
 
+    # JWTs identify a user; the database remains authoritative for existence and role.
     user = await get_user_by_id(session, user_id)
     if user is None:
         raise _authentication_exception()

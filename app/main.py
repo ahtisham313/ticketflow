@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         encoding="utf-8",
         decode_responses=True,
     )
+    # One process-wide client lets redis-py reuse its connection pool per request.
     app.state.redis = redis_client
 
     try:

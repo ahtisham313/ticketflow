@@ -54,6 +54,7 @@ async def resolve_ticket_list_cache_key(
         else f"customer:{current_user.id}"
     )
     normalized_query = parameters.query.strip() if parameters.query is not None else ""
+    # Canonical JSON ensures equivalent filters always produce the same hash.
     canonical_parameters = {
         "category": (
             parameters.category.value if parameters.category is not None else None
@@ -161,6 +162,7 @@ async def invalidate_ticket_caches(redis: Redis) -> None:
 
     try:
         async with redis.pipeline(transaction=True) as pipeline:
+            # A version bump invalidates every filtered list key without a key scan.
             pipeline.set(TICKET_LIST_VERSION_KEY, "1", nx=True)
             pipeline.incr(TICKET_LIST_VERSION_KEY)
             pipeline.delete(DASHBOARD_STATS_KEY)

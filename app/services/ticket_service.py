@@ -82,8 +82,10 @@ async def get_accessible_ticket(
 
     statement = select(Ticket).where(Ticket.id == ticket_id)
     if current_user.role == UserRole.CUSTOMER:
+        # Scope in SQL so inaccessible and missing tickets have identical behavior.
         statement = statement.where(Ticket.customer_id == current_user.id)
     if for_update:
+        # Serialize competing mutations before checking state-dependent rules.
         statement = statement.with_for_update()
 
     ticket = await session.scalar(statement)
@@ -132,6 +134,7 @@ async def list_tickets(
     data_statement = (
         select(Ticket)
         .where(*conditions)
+        # The UUID tie-breaker keeps pagination stable when timestamps match.
         .order_by(Ticket.created_at.desc(), Ticket.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)

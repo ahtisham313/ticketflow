@@ -133,6 +133,7 @@ async def schedule_webhook_event(
     if not registrations:
         return
 
+    # Background tasks must not depend on request-scoped ORM instances or sessions.
     targets = tuple(
         WebhookDeliveryTarget(
             registration_id=registration.id,
@@ -148,6 +149,7 @@ async def schedule_webhook_event(
         timestamp=datetime.now(timezone.utc),
         data=data,
     ).model_dump(mode="json")
+    # Serialize once so the bytes covered by the signature are exactly those sent.
     body = serialize_webhook_payload(envelope)
     background_tasks.add_task(dispatch_webhook_event, targets, envelope, body)
 
@@ -181,6 +183,7 @@ async def dispatch_webhook_event(
     async with httpx.AsyncClient(
         timeout=settings.webhook_delivery_timeout_seconds
     ) as client:
+        # One slow or broken receiver must not prevent delivery to other targets.
         results = await asyncio.gather(
             *(
                 _deliver_to_target(client, target, payload, body)

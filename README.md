@@ -1,24 +1,26 @@
 # TicketFlow
 
-TicketFlow is a production-style FastAPI modular monolith for a support-ticket
-technical assessment. It currently contains the Phase 1 foundation, Phase 2 JWT
-authentication, Phase 3 ticket workflow/comments, and Phase 4 Redis caching with
-agent dashboard statistics. Phase 5 adds authenticated real-time notifications.
-Phase 6 adds signed outgoing webhook delivery and PostgreSQL delivery auditing.
+TicketFlow is a FastAPI backend for a support-ticket system. Customers can create
+and manage their own tickets, while support agents can review all tickets, add
+comments, and move tickets through a controlled resolution workflow. The project
+includes a REST API, PostgreSQL persistence, Redis caching, WebSocket notifications,
+signed outgoing webhooks, and a Docker Compose development environment.
 
-## Phase 1 stack
+## Tech Stack
 
-- Python 3.12 and FastAPI
-- Pydantic Settings
-- SQLAlchemy 2 async ORM with asyncpg
-- PostgreSQL 16 and Alembic async migrations
-- redis-py async client and Redis 7
-- Docker and Docker Compose
+- Python 3.12
+- FastAPI + Pydantic v2
+- SQLAlchemy 2 async + asyncpg
+- PostgreSQL 16
+- Alembic
+- Redis 7
+- PyJWT + pwdlib/Argon2
+- HTTPX
+- Docker + Docker Compose
 
-## Start from a clean checkout
+Exact dependency versions are defined in `requirements.txt`.
 
-Create your local environment file. The included values are development placeholders;
-replace them before using the project outside a local assessment environment.
+## Quick Start
 
 PowerShell:
 
@@ -34,24 +36,87 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Compose waits for real PostgreSQL and Redis health checks. The API container then runs,
-in order:
-
-```text
-alembic upgrade head
-python -m app.seed
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-The commands are joined with fail-fast shell semantics, so a failed migration or seed
+Compose waits for PostgreSQL and Redis health checks. The API container then applies
+Alembic migrations, runs the idempotent agent seed, and starts Uvicorn on port 8000.
+The startup commands use fail-fast shell chaining, so a migration or seed failure
 prevents the API server from starting.
 
-## Verify the running application
+## Seeded Agent
+
+The development agent configured in `.env.example` is:
+
+```text
+Email: support@example.com
+Password: TicketFlowDev123!
+```
+
+These credentials are for local development only. The seed command normalizes the
+email and skips creation when the account already exists, so restarting the stack
+does not create duplicate agents.
+
+## API Documentation
 
 - Health: <http://localhost:8000/health>
-- OpenAPI documentation: <http://localhost:8000/docs>
+- Swagger UI: <http://localhost:8000/docs>
 
-Phase 2 authentication endpoints:
+The health endpoint checks both PostgreSQL and Redis. It returns HTTP 503 with a
+`degraded` status when either dependency check fails.
+
+## Core Features
+
+### Authentication
+
+Login returns signed JWT access and refresh tokens. Public registration always creates
+a `CUSTOMER`; the seeded `AGENT` uses the same login endpoint. Protected routes load
+the current user from PostgreSQL and enforce roles server-side. Refresh tokens can be
+exchanged for a new access token, but refresh-token rotation is not implemented.
+
+### Tickets and comments
+
+Customers can create, list, view, edit, and delete only their own tickets. Customer
+edits and deletion are restricted to `OPEN` tickets. Agents can list and view all
+tickets, add comments, and use the dedicated status endpoint. Both an authorized
+customer and an agent can read or add comments on an accessible ticket.
+
+### Filtering, search, and pagination
+
+Ticket lists support filters for status, priority, and category; literal text search
+across title and description; and database-level pagination. Search uses PostgreSQL
+`ILIKE` with escaped wildcard characters.
+
+### Redis caching and dashboard
+
+Redis caches filtered ticket-list responses for 30 seconds and agent dashboard
+statistics for 60 seconds by default. Ticket details and comments are read directly
+from PostgreSQL. The dashboard reports total tickets and counts grouped by status,
+priority, and category.
+
+### WebSockets
+
+Authenticated clients can subscribe to an accessible ticket, and agents can subscribe
+to the dashboard. WebSockets deliver `comment.created` and `ticket.status_changed`
+notifications; REST remains responsible for all mutations.
+
+### Outgoing webhooks
+
+Agents can register endpoints for `ticket.created` and `ticket.status_changed`.
+TicketFlow signs the exact outgoing JSON bytes with a per-registration HMAC-SHA256
+secret, sends the request through HTTPX in a FastAPI background task, and records each
+delivery attempt in PostgreSQL. Webhook registration responses reveal the secret once;
+normal registration lists and delivery history do not include it.
+
+## Ticket Workflow
+
+```text
+OPEN -> IN_PROGRESS -> RESOLVED -> CLOSED
+```
+
+Only an `AGENT` can change ticket status. Each transition must move to the next state;
+the API rejects skipped and backward transitions.
+
+## API Summary
+
+### Authentication
 
 ```text
 POST /api/v1/auth/register
@@ -60,58 +125,7 @@ POST /api/v1/auth/refresh
 GET  /api/v1/auth/me
 ```
 
-Public registration always creates a `CUSTOMER`. The seeded `AGENT` uses the same
-login endpoint. Access tokens authenticate API requests; refresh tokens can only be
-exchanged for a new access token and cannot access protected endpoints.
-
-A healthy response is:
-
-```json
-{
-  "status": "ok",
-  "database": "ok",
-  "redis": "ok"
-}
-```
-
-Inspect the created tables:
-
-```bash
-docker compose exec postgres psql -U ticketflow -d ticketflow -c "\\dt"
-```
-
-Expected application tables are `users`, `tickets`, `comments`,
-`webhook_registrations`, and `webhook_delivery_logs`. Alembic also creates
-`alembic_version`.
-
-## Seeded development agent
-
-The example environment configures:
-
-```text
-email: support@example.com
-password: replace-with-a-development-agent-password
-```
-
-The password is hashed with Argon2 before storage and is never logged. Running
-`python -m app.seed` again looks up the normalized email and skips creation when the
-account already exists.
-
-## Foundation decisions
-
-- PostgreSQL is authoritative; Redis is only an external dependency in Phase 1.
-- Alembic exclusively owns schema creation. The application never calls
-  `Base.metadata.create_all()`.
-- Native PostgreSQL enums and JSONB enforce domain shape at the storage boundary.
-- UUIDs are generated by the ORM, while timestamps and stable defaults use database
-  server defaults.
-- Foreign keys use explicit delete behavior. Comments follow their deleted ticket;
-  account and webhook audit references are restricted to preserve history.
-- The FastAPI lifespan owns long-lived Redis and database-pool cleanup.
-- Authentication settings and required libraries are present for the planned Phase 2,
-  but no authentication behavior is implemented here.
-
-## Phase 3 ticket and comment API
+### Tickets
 
 ```text
 POST   /api/v1/tickets
@@ -120,58 +134,17 @@ GET    /api/v1/tickets/{ticket_id}
 PATCH  /api/v1/tickets/{ticket_id}
 DELETE /api/v1/tickets/{ticket_id}
 PATCH  /api/v1/tickets/{ticket_id}/status
-GET    /api/v1/tickets/{ticket_id}/comments
-POST   /api/v1/tickets/{ticket_id}/comments
 ```
 
-Customers create, list, view, edit, and delete only their own tickets. Content edits
-and deletion are limited to `OPEN`; agents use comments and the dedicated sequential
-status workflow. Ticket lists support role-scoped filters, PostgreSQL `ILIKE` search,
-and database-level pagination.
-
-## Phase 4 Redis caching and dashboard
-
-Filtered ticket lists are cached for 30 seconds with deterministic keys shaped like:
+### Comments and dashboard
 
 ```text
-tickets:list:v<version>:agent:<sha256>
-tickets:list:v<version>:customer:<user_uuid>:<sha256>
+GET  /api/v1/tickets/{ticket_id}/comments
+POST /api/v1/tickets/{ticket_id}/comments
+GET  /api/v1/dashboard/stats
 ```
 
-Every successful ticket write increments `tickets:list:version` and deletes the fixed
-`dashboard:stats` cache entry. Old list versions expire naturally; application code
-never scans or wildcard-deletes list keys. `GET /api/v1/dashboard/stats` is agent-only
-and caches current PostgreSQL aggregate counts for 60 seconds.
-
-## Phase 5 real-time WebSockets
-
-TicketFlow exposes two notification-only WebSocket endpoints:
-
-```text
-/ws/tickets/{ticket_id}?token=<access_token>
-/ws/dashboard?token=<access_token>
-```
-
-Ticket subscriptions use the same database-backed ownership rules as the REST API:
-customers may subscribe only to their own tickets, while agents may subscribe to any
-ticket. The dashboard subscription is agent-only. Refresh, expired, malformed, and
-missing tokens are rejected because WebSockets require a valid access token.
-
-Creating a comment over REST emits `comment.created` to that ticket's channel after
-the comment commits. A successful REST status transition emits
-`ticket.status_changed` to both the ticket channel and connected dashboard agents,
-after PostgreSQL commits and Phase 4 cache invalidation finishes. WebSocket delivery
-is supplementary and does not replace REST or PostgreSQL as the source of truth.
-
-WebSocket connections are maintained in-process because the assessment runs a single
-application instance. With multiple API instances, an event distribution mechanism
-such as Redis Pub/Sub would be required so connections attached to different
-instances receive the same events. That distributed extension is intentionally not
-implemented in Phase 5.
-
-## Phase 6 signed outgoing webhooks
-
-Agents manage subscriptions through:
+### Webhooks
 
 ```text
 POST   /api/v1/webhooks
@@ -180,43 +153,45 @@ DELETE /api/v1/webhooks/{webhook_id}
 GET    /api/v1/webhooks/deliveries?limit=100
 ```
 
-Supported external event names are exactly `ticket.created` and
-`ticket.status_changed`. PostgreSQL retains the original enum labels
-`TICKET_CREATED` and `TICKET_STATUS_CHANGED`; the Python enum maps those labels to
-the public dot-separated values.
-
-Each registration receives a server-generated 256-bit secret. It is returned only
-by the creation endpoint; normal list and delivery-history responses never expose
-it. Registrations are deactivated instead of hard-deleted so their delivery audit
-rows remain intact.
-
-TicketFlow deterministically serializes each event to UTF-8 JSON bytes, calculates
-HMAC-SHA256 over those exact bytes, and sends the same bytes with:
+### WebSockets
 
 ```text
-Content-Type: application/json
-X-TicketFlow-Signature: sha256=<hex-digest>
-X-TicketFlow-Event: <event-name>
-X-TicketFlow-Delivery-ID: <delivery-uuid>
+/ws/tickets/{ticket_id}?token=<access_token>
+/ws/dashboard?token=<access_token>
 ```
 
-FastAPI `BackgroundTasks` runs external HTTP delivery after the ticket response is
-sent. Background delivery never uses the request-scoped SQLAlchemy session; each
-attempt opens its own session to write an immutable delivery log. A 2xx response is
-successful. Non-2xx and network errors are recorded as failures and cannot undo the
-already committed ticket operation. There are deliberately no retries or queues in
-this phase.
+## Architecture
 
-For production, protect recoverable webhook secrets with managed encryption or a
-secret-management system, apply outbound URL/egress controls to reduce SSRF risk,
-and move delivery to a durable queue with an explicit retry policy. Those extensions
-are outside this assessment phase.
+TicketFlow uses a modular-monolith design with PostgreSQL as the source of truth.
+Redis is an optional caching layer: failures fall back to PostgreSQL, and versioned
+ticket-list keys provide O(1) invalidation without scanning the keyspace. WebSocket
+connections are held in memory, and outgoing webhooks run as background tasks because
+the assessment uses one API instance without a separate worker.
 
-## Stop the stack
+The decisions, reasons, and trade-offs are documented in
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
-```bash
+## Testing and Manual Verification
+
+There is currently no committed automated test suite or CI workflow. Use Swagger UI
+or another HTTP client for a short manual flow:
+
+1. Log in as the seeded agent and register webhooks for `ticket.created` and
+   `ticket.status_changed`.
+2. Register and log in as a customer, create a ticket, subscribe to its WebSocket,
+   and add a comment.
+3. Log in as the agent, subscribe to the dashboard WebSocket, and change the ticket
+   status.
+4. Confirm the WebSocket events, outgoing webhook requests, and delivery logs.
+
+For webhook signature verification, calculate HMAC-SHA256 with the creation-time
+secret over the exact raw request body and compare it with
+`X-TicketFlow-Signature`.
+
+## Shutting Down
+
+```powershell
 docker compose down
 ```
 
-This retains the named PostgreSQL volume. Deleting that volume is intentionally not
-part of the normal shutdown procedure.
+This stops the containers and retains the named PostgreSQL volume.

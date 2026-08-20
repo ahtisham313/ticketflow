@@ -53,6 +53,7 @@ class ConnectionManager:
         if not connections:
             return
 
+        # Do not hold the membership lock while waiting on client network I/O.
         results = await asyncio.gather(
             *(websocket.send_json(event) for websocket in connections),
             return_exceptions=True,
