@@ -7,7 +7,6 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
-    HTTPException,
     Query,
     Response,
     status,
@@ -33,8 +32,6 @@ from app.schemas.ticket import (
     TicketUpdateRequest,
 )
 from app.services.ticket_service import (
-    TicketNotFoundError,
-    TicketStateError,
     change_ticket_status,
     create_ticket,
     delete_open_ticket,
@@ -159,10 +156,7 @@ async def get_detail(
 ) -> TicketResponse:
     """Return a ticket only when it is inside the user's access scope."""
 
-    try:
-        ticket = await get_accessible_ticket(session, ticket_id, current_user)
-    except TicketNotFoundError:
-        raise _ticket_not_found() from None
+    ticket = await get_accessible_ticket(session, ticket_id, current_user)
 
     return TicketResponse.model_validate(ticket)
 
@@ -177,17 +171,12 @@ async def update(
 ) -> TicketResponse:
     """Partially update a customer-owned OPEN ticket."""
 
-    try:
-        ticket = await update_open_ticket(
-            session,
-            ticket_id,
-            customer,
-            payload.model_dump(exclude_unset=True),
-        )
-    except TicketNotFoundError:
-        raise _ticket_not_found() from None
-    except TicketStateError as exc:
-        raise _ticket_state_error(exc) from None
+    ticket = await update_open_ticket(
+        session,
+        ticket_id,
+        customer,
+        payload.model_dump(exclude_unset=True),
+    )
 
     await invalidate_ticket_caches(redis)
     return TicketResponse.model_validate(ticket)
@@ -206,12 +195,7 @@ async def delete(
 ) -> Response:
     """Hard-delete a customer-owned OPEN ticket and its comments."""
 
-    try:
-        await delete_open_ticket(session, ticket_id, customer)
-    except TicketNotFoundError:
-        raise _ticket_not_found() from None
-    except TicketStateError as exc:
-        raise _ticket_state_error(exc) from None
+    await delete_open_ticket(session, ticket_id, customer)
 
     await invalidate_ticket_caches(redis)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -228,12 +212,7 @@ async def update_status(
 ) -> TicketResponse:
     """Move a ticket through exactly one valid workflow transition."""
 
-    try:
-        status_change = await change_ticket_status(session, ticket_id, payload.status)
-    except TicketNotFoundError:
-        raise _ticket_not_found() from None
-    except TicketStateError as exc:
-        raise _ticket_state_error(exc) from None
+    status_change = await change_ticket_status(session, ticket_id, payload.status)
 
     await invalidate_ticket_caches(redis)
     ticket = status_change.ticket
@@ -262,21 +241,3 @@ async def update_status(
         },
     )
     return TicketResponse.model_validate(ticket)
-
-
-def _ticket_not_found() -> HTTPException:
-    """Return the same 404 for missing and customer-inaccessible tickets."""
-
-    return HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Ticket not found",
-    )
-
-
-def _ticket_state_error(exc: TicketStateError) -> HTTPException:
-    """Translate a service business-rule error to HTTP 400."""
-
-    return HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=str(exc),
-    )

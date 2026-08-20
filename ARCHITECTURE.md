@@ -111,7 +111,7 @@ WebSocket endpoints are notification-only:
 /ws/dashboard?token=<access-token>
 ```
 
-Customers can subscribe only to their own tickets. Agents can subscribe to any ticket and the dashboard. The server publishes `comment.created` and `ticket.status_changed`; all mutations still use the REST API.
+Customers can subscribe only to their own tickets. Agents can subscribe to any ticket and the dashboard. Ticket subscribers receive `comment.created` and `ticket.status_changed`; dashboard subscribers receive both event types across all tickets. All mutations still use the REST API.
 
 ## Project Structure
 

@@ -94,8 +94,9 @@ priority, and category.
 ### WebSockets
 
 Authenticated clients can subscribe to an accessible ticket, and agents can subscribe
-to the dashboard. WebSockets deliver `comment.created` and `ticket.status_changed`
-notifications; REST remains responsible for all mutations.
+to the dashboard. Ticket subscribers receive `comment.created` and
+`ticket.status_changed`; dashboard subscribers receive both events across all tickets.
+REST remains responsible for all mutations.
 
 ### Outgoing webhooks
 
@@ -104,6 +105,28 @@ TicketFlow signs the exact outgoing JSON bytes with a per-registration HMAC-SHA2
 secret, sends the request through HTTPX in a FastAPI background task, and records each
 delivery attempt in PostgreSQL. Webhook registration responses reveal the secret once;
 normal registration lists and delivery history do not include it.
+
+### Error responses
+
+API failures use one JSON envelope containing a stable code, a client-readable message,
+and optional validation details. Authentication failures retain the
+`WWW-Authenticate: Bearer` response header. Ticket workflow and mutability conflicts
+return HTTP 409, while malformed request data returns HTTP 422.
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "details": [
+      {
+        "field": "body.email",
+        "message": "value is not a valid email address"
+      }
+    ]
+  }
+}
+```
 
 ## Ticket Workflow
 

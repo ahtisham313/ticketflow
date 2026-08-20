@@ -3,7 +3,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import require_agent
@@ -16,7 +16,6 @@ from app.schemas.webhook import (
     WebhookRegistrationResponse,
 )
 from app.services.webhook_service import (
-    WebhookNotFoundError,
     create_webhook_registration,
     deactivate_webhook_registration,
     list_webhook_deliveries,
@@ -88,12 +87,6 @@ async def delete(
 ) -> Response:
     """Deactivate a subscription while retaining its delivery history."""
 
-    try:
-        await deactivate_webhook_registration(session, webhook_id)
-    except WebhookNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Webhook registration not found",
-        ) from None
+    await deactivate_webhook_registration(session, webhook_id)
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)

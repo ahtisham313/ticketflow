@@ -15,6 +15,7 @@ from app.schemas.dashboard import (
     TicketPriorityCounts,
     TicketStatusCounts,
 )
+from app.schemas.error import ErrorBody, ErrorResponse, ValidationErrorDetail
 from app.schemas.ticket import (
     TicketCreateRequest,
     TicketListResponse,
@@ -43,6 +44,9 @@ __all__ = [
     "TicketCategoryCounts",
     "TicketPriorityCounts",
     "TicketStatusCounts",
+    "ErrorBody",
+    "ErrorResponse",
+    "ValidationErrorDetail",
     "TicketCreateRequest",
     "TicketListResponse",
     "TicketResponse",

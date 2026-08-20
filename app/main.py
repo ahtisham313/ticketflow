@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 
 from app.api.health import router as health_router
+from app.api.errors import COMMON_ERROR_RESPONSES, register_exception_handlers
 from app.api.v1.auth import router as auth_router
 from app.api.v1.comments import router as comments_router
 from app.api.v1.dashboard import router as dashboard_router
@@ -44,7 +45,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url=None,
     lifespan=lifespan,
+    responses=COMMON_ERROR_RESPONSES,
 )
+register_exception_handlers(app)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(tickets_router)

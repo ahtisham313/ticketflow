@@ -2,12 +2,13 @@
 
 from typing import Annotated, cast
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import TokenType, TokenValidationError, decode_token
+from app.api.errors import APIException
 from app.db.session import get_db_session
 from app.models.user import User, UserRole
 from app.services.auth_service import get_user_by_id
@@ -21,12 +22,13 @@ def get_redis(request: Request) -> Redis:
     return cast(Redis, request.app.state.redis)
 
 
-def _authentication_exception() -> HTTPException:
+def _authentication_exception() -> APIException:
     """Create the consistent 401 response used by protected endpoints."""
 
-    return HTTPException(
+    return APIException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        code="AUTHENTICATION_REQUIRED",
+        message="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -65,9 +67,10 @@ async def require_agent(
     """Allow only a currently authenticated database AGENT."""
 
     if current_user.role != UserRole.AGENT:
-        raise HTTPException(
+        raise APIException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Agent access required",
+            code="FORBIDDEN",
+            message="Agent access required",
         )
 
     return current_user
@@ -79,9 +82,10 @@ async def require_customer(
     """Allow only a currently authenticated database CUSTOMER."""
 
     if current_user.role != UserRole.CUSTOMER:
-        raise HTTPException(
+        raise APIException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Customer access required",
+            code="FORBIDDEN",
+            message="Customer access required",
         )
 
     return current_user

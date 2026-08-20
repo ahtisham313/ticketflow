@@ -18,6 +18,10 @@ class TicketNotFoundError(LookupError):
 class TicketStateError(ValueError):
     """Raised when a ticket's current state forbids a requested mutation."""
 
+    def __init__(self, message: str, *, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
 
 @dataclass(frozen=True, slots=True)
 class TicketPage:
@@ -211,7 +215,8 @@ async def change_ticket_status(
     if new_status != expected_status:
         raise TicketStateError(
             f"Invalid status transition from {ticket.status.value} "
-            f"to {new_status.value}"
+            f"to {new_status.value}",
+            code="INVALID_STATUS_TRANSITION",
         )
 
     ticket.status = new_status
@@ -224,8 +229,12 @@ def _require_open(ticket: Ticket, *, operation: str) -> None:
     """Enforce the customer edit/delete rule."""
 
     if ticket.status != TicketStatus.OPEN:
+        error_code = (
+            "TICKET_NOT_EDITABLE" if operation == "updated" else "TICKET_NOT_DELETABLE"
+        )
         raise TicketStateError(
-            f"Only OPEN tickets can be {operation} by their customer"
+            f"Only OPEN tickets can be {operation} by their customer",
+            code=error_code,
         )
 
 

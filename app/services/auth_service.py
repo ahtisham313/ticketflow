@@ -29,6 +29,10 @@ class AuthenticationError(ValueError):
     """Raised for deliberately generic authentication failures."""
 
 
+class InvalidRefreshTokenError(AuthenticationError):
+    """Raised when a refresh token cannot be trusted or no longer identifies a user."""
+
+
 @dataclass(frozen=True, slots=True)
 class TokenPair:
     """Tokens and access-token lifetime produced by a successful login."""
@@ -141,11 +145,11 @@ async def issue_access_token_from_refresh(
     try:
         user_id = decode_token(refresh_token, expected_type=TokenType.REFRESH)
     except TokenValidationError as exc:
-        raise AuthenticationError from exc
+        raise InvalidRefreshTokenError from exc
 
     user = await get_user_by_id(session, user_id)
     if user is None:
-        raise AuthenticationError
+        raise InvalidRefreshTokenError
 
     settings = get_settings()
     return FreshAccessToken(

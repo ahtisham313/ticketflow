@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
@@ -17,8 +17,6 @@ from app.schemas.auth import (
     UserRegisterRequest,
 )
 from app.services.auth_service import (
-    AuthenticationError,
-    DuplicateEmailError,
     issue_access_token_from_refresh,
     login_user,
     register_customer,
@@ -38,17 +36,11 @@ async def register(
 ) -> CurrentUserResponse:
     """Register a public account as a CUSTOMER."""
 
-    try:
-        user = await register_customer(
-            session,
-            email=str(payload.email),
-            password=payload.password.get_secret_value(),
-        )
-    except DuplicateEmailError:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email is already registered",
-        ) from None
+    user = await register_customer(
+        session,
+        email=str(payload.email),
+        password=payload.password.get_secret_value(),
+    )
 
     return CurrentUserResponse.model_validate(user)
 
@@ -60,18 +52,11 @@ async def login(
 ) -> TokenPairResponse:
     """Authenticate credentials and return access and refresh tokens."""
 
-    try:
-        tokens = await login_user(
-            session,
-            email=str(payload.email),
-            password=payload.password.get_secret_value(),
-        )
-    except AuthenticationError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
+    tokens = await login_user(
+        session,
+        email=str(payload.email),
+        password=payload.password.get_secret_value(),
+    )
 
     return TokenPairResponse(
         access_token=tokens.access_token,
@@ -87,17 +72,10 @@ async def refresh(
 ) -> AccessTokenResponse:
     """Exchange a valid refresh token for a new access token."""
 
-    try:
-        token = await issue_access_token_from_refresh(
-            session,
-            payload.refresh_token.get_secret_value(),
-        )
-    except AuthenticationError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
+    token = await issue_access_token_from_refresh(
+        session,
+        payload.refresh_token.get_secret_value(),
+    )
 
     return AccessTokenResponse(
         access_token=token.access_token,
