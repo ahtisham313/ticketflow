@@ -12,11 +12,11 @@ and an idempotent support-agent seed.
 
 ## Stretch Goals
 
-None claimed. The submission focuses on completing and documenting the required core
-functionality.
+Automated tests cover authentication, role and ownership permissions, and the ticket
+status workflow. `.github/workflows/tests.yml` runs the same suite against an isolated
+PostgreSQL service on pushes and pull requests.
 
 ## AI Tools Used
 
 I used ChatGPT, Claude, and Gemini while comparing implementation approaches and
 reviewing architectural decisions. OpenAI Codex was used to assist with implementation.
-

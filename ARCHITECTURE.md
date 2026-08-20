@@ -134,6 +134,5 @@ Alembic manages schema changes. Docker startup applies migrations, runs the idem
 - `ILIKE` search has no relevance ranking.
 - Refresh tokens cannot be individually revoked.
 - Old versioned cache entries remain until their TTL expires.
-- The repository does not yet include an automated test suite or CI workflow.
 
 For production scaling, the first changes would be a shared WebSocket event bus, a durable webhook worker with retries, and encrypted webhook-secret storage.

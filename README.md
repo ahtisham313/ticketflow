@@ -194,10 +194,27 @@ the assessment uses one API instance without a separate worker.
 The decisions, reasons, and trade-offs are documented in
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Testing and Manual Verification
+## Automated Tests
 
-There is currently no committed automated test suite or CI workflow. Use Swagger UI
-or another HTTP client for a short manual flow:
+The focused pytest suite covers authentication, role and ownership permissions, and
+the sequential ticket workflow. Tests require an isolated PostgreSQL database whose
+name ends in `_test`; the safety check refuses any other database name.
+
+Set both database variables to the isolated database, apply migrations, and run:
+
+```powershell
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+alembic upgrade head
+python -m pytest -q
+```
+
+GitHub Actions runs the same migration and test commands against a PostgreSQL service
+on every push and pull request. Redis is replaced by an in-memory test double because
+cache behavior is outside this focused suite.
+
+## Manual Verification
+
+Use Swagger UI or another HTTP client for a short manual flow:
 
 1. Log in as the seeded agent and register webhooks for `ticket.created` and
    `ticket.status_changed`.
