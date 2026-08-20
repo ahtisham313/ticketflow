@@ -12,9 +12,8 @@ and an idempotent support-agent seed.
 
 ## Stretch Goals
 
-Automated tests cover authentication, role and ownership permissions, and the ticket
-status workflow. `.github/workflows/tests.yml` runs the same suite against an isolated
-PostgreSQL service on pushes and pull requests.
+- Automated tests with GitHub Actions CI.
+- Redis-backed rate limiting for login and ticket creation.
 
 ## AI Tools Used
 

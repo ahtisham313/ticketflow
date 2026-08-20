@@ -45,6 +45,7 @@ COMMON_ERROR_RESPONSES: dict[int, dict[str, Any]] = {
     status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
     status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    status.HTTP_429_TOO_MANY_REQUESTS: {"model": ErrorResponse},
     422: {"model": ErrorResponse},
     status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
 }
@@ -55,10 +56,22 @@ _DEFAULT_HTTP_ERROR_CODES = {
     status.HTTP_403_FORBIDDEN: "FORBIDDEN",
     status.HTTP_404_NOT_FOUND: "RESOURCE_NOT_FOUND",
     status.HTTP_409_CONFLICT: "CONFLICT",
+    status.HTTP_429_TOO_MANY_REQUESTS: "RATE_LIMIT_EXCEEDED",
     422: "VALIDATION_ERROR",
     status.HTTP_500_INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
     status.HTTP_503_SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
 }
+
+
+def rate_limit_exception(retry_after_seconds: int) -> APIException:
+    """Create the common 429 response with a client-safe retry delay."""
+
+    return APIException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        code="RATE_LIMIT_EXCEEDED",
+        message="Too many requests. Please try again later.",
+        headers={"Retry-After": str(retry_after_seconds)},
+    )
 
 
 def register_exception_handlers(app: FastAPI) -> None:

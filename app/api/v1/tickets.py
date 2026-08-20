@@ -14,6 +14,7 @@ from fastapi import (
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.errors import rate_limit_exception
 from app.core.deps import (
     get_current_user,
     get_redis,
@@ -46,6 +47,11 @@ from app.services.cache_service import (
     resolve_ticket_list_cache_key,
     set_cached_ticket_list,
 )
+from app.services.rate_limit_service import (
+    TICKET_CREATE_RATE_LIMIT,
+    consume_rate_limit,
+    ticket_create_rate_limit_key,
+)
 from app.services.ws_manager import (
     DASHBOARD_CHANNEL,
     connection_manager,
@@ -69,6 +75,14 @@ async def create(
     redis: Annotated[Redis, Depends(get_redis)],
 ) -> TicketResponse:
     """Create an OPEN ticket for the authenticated customer."""
+
+    rate_limit = await consume_rate_limit(
+        redis,
+        key=ticket_create_rate_limit_key(customer.id),
+        limit=TICKET_CREATE_RATE_LIMIT,
+    )
+    if not rate_limit.allowed:
+        raise rate_limit_exception(rate_limit.retry_after_seconds or 1)
 
     ticket = await create_ticket(
         session,

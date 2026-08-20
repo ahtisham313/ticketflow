@@ -91,6 +91,14 @@ statistics for 60 seconds by default. Ticket details and comments are read direc
 from PostgreSQL. The dashboard reports total tickets and counts grouped by status,
 priority, and category.
 
+### Redis-backed rate limiting
+
+- Login: 5 requests per minute for each client IP.
+- Ticket creation: 30 requests per minute for each authenticated customer.
+
+Rate limiting fails open if Redis is unavailable, so core PostgreSQL operations can
+continue.
+
 ### WebSockets
 
 Authenticated clients can subscribe to an accessible ticket, and agents can subscribe

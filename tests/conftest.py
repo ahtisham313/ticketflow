@@ -66,6 +66,7 @@ class FakeRedis:
 
     def __init__(self) -> None:
         self._values: dict[str, str] = {}
+        self._ttls: dict[str, int] = {}
 
     async def get(self, key: str) -> str | None:
         return self._values.get(key)
@@ -78,10 +79,11 @@ class FakeRedis:
         nx: bool = False,
         ex: int | None = None,
     ) -> bool:
-        del ex
         if nx and key in self._values:
             return False
         self._values[key] = str(value)
+        if ex is not None:
+            self._ttls[key] = ex
         return True
 
     async def incr(self, key: str, amount: int = 1) -> int:
@@ -95,7 +97,23 @@ class FakeRedis:
             if key in self._values:
                 removed += 1
                 del self._values[key]
+                self._ttls.pop(key, None)
         return removed
+
+    async def eval(
+        self,
+        _script: str,
+        numkeys: int,
+        key: str,
+        window_seconds: int,
+    ) -> list[int]:
+        if numkeys != 1:
+            raise ValueError("FakeRedis supports one script key")
+
+        count = await self.incr(key)
+        if count == 1 or key not in self._ttls:
+            self._ttls[key] = int(window_seconds)
+        return [count, self._ttls[key]]
 
     def pipeline(self, *, transaction: bool = True) -> FakeRedisPipeline:
         del transaction
